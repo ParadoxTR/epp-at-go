@@ -2,7 +2,12 @@ package epp
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	ierr "github.com/ParadoxTR/epp-at-go/internal/errors"
 )
 
 type CreateContactRequest struct {
@@ -12,9 +17,9 @@ type CreateContactRequest struct {
 }
 
 type CreateContactCommand struct {
-	Create    CreateContact     `xml:"create"`
 	Extension *CommandExtension `xml:"extension,omitempty"`
 	ClTRID    string            `xml:"clTRID"`
+	Create    CreateContact     `xml:"create"`
 }
 
 type CreateContact struct {
@@ -23,20 +28,20 @@ type CreateContact struct {
 }
 
 type ContactCreate struct {
+	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
 	XMLName    xml.Name          `xml:"contact:create"`
 	Xmlns      string            `xml:"xmlns:contact,attr"`
 	ID         string            `xml:"contact:id"`
-	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
 	Voice      string            `xml:"contact:voice,omitempty"`
 	Fax        string            `xml:"contact:fax,omitempty"`
 	Email      string            `xml:"contact:email"`
-	AuthInfo   ContactAuthInfo   `xml:"contact:authInfo"` // Required by schema but empty for Austrian EPP
-	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
+	AuthInfo   ContactAuthInfo   `xml:"contact:authInfo"`
+	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
 }
 
 type CommandExtension struct {
-	XMLName xml.Name            `xml:"extension"`
 	AtExt   *AtContactExtension `xml:"at-ext-contact:create,omitempty"`
+	XMLName xml.Name            `xml:"extension"`
 }
 
 type AtContactExtension struct {
@@ -54,8 +59,8 @@ type CreateContactResponse struct {
 }
 
 type ResponseExtension struct {
-	XMLName    xml.Name    `xml:"extension"`
 	Conditions *Conditions `xml:"conditions,omitempty"`
+	XMLName    xml.Name    `xml:"extension"`
 }
 
 type Conditions struct {
@@ -80,8 +85,7 @@ type CreateContactData struct {
 	CrDate  string   `xml:"crDate"`
 }
 
-func (c *Client) CreateContact(contact Contact) (*CreateContactResponse, error) {
-
+func (c *Client) CreateContact(contact *Contact) (*CreateContactResponse, error) {
 	var extension *CommandExtension
 	if contact.Type != "" {
 		extension = &CommandExtension{
@@ -116,6 +120,10 @@ func (c *Client) CreateContact(contact Contact) (*CreateContactResponse, error) 
 		},
 	}
 
+	// Normalize street address lines to meet NIC.AT constraints.
+	// NIC.AT commonly requires a maximum of 3 street lines and ~35 characters per line.
+	normalizeContactPostalInfo(&createReq.Command.Create.ContactCreate.PostalInfo)
+
 	requestXML, err := xml.Marshal(createReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal create contact request: %w", err)
@@ -140,7 +148,7 @@ func (c *Client) CreateContact(contact Contact) (*CreateContactResponse, error) 
 			}
 		}
 
-		return nil, fmt.Errorf(errorMsg)
+		return nil, errors.New(errorMsg)
 	}
 
 	return &response, nil
@@ -169,16 +177,16 @@ type ContactInfo struct {
 }
 
 type InfoContactResponse struct {
+	Extension *InfoContactExtension   `xml:"response>extension,omitempty"`
 	XMLName   xml.Name                `xml:"epp"`
 	Result    Result                  `xml:"response>result"`
-	ResData   InfoContactResponseData `xml:"response>resData"`
-	Extension *InfoContactExtension   `xml:"response>extension,omitempty"`
 	TrID      TrID                    `xml:"response>trID"`
+	ResData   InfoContactResponseData `xml:"response>resData"`
 }
 
 type InfoContactExtension struct {
-	XMLName xml.Name                `xml:"extension"`
 	AtExt   *AtContactInfoExtension `xml:"at-ext-contact:infData,omitempty"`
+	XMLName xml.Name                `xml:"extension"`
 }
 
 type AtContactInfoExtension struct {
@@ -192,22 +200,22 @@ type InfoContactResponseData struct {
 }
 
 type InfoContactData struct {
-	XMLName    xml.Name          `xml:"infData"`
-	Xmlns      string            `xml:"xmlns,attr"`
-	ID         string            `xml:"id"`
-	ROID       string            `xml:"roid"`
-	Status     []ContactStatus   `xml:"status"`
+	Disclose   *ContactDisclose  `xml:"disclose"`
 	PostalInfo ContactPostalInfo `xml:"postalInfo"`
+	XMLName    xml.Name          `xml:"infData"`
+	UpID       string            `xml:"upID"`
+	ROID       string            `xml:"roid"`
 	Voice      string            `xml:"voice"`
 	Fax        string            `xml:"fax"`
 	Email      string            `xml:"email"`
 	ClID       string            `xml:"clID"`
 	CrID       string            `xml:"crID"`
 	CrDate     string            `xml:"crDate"`
-	UpID       string            `xml:"upID"`
+	ID         string            `xml:"id"`
 	UpDate     string            `xml:"upDate"`
 	AuthInfo   string            `xml:"authInfo>pw"`
-	Disclose   *ContactDisclose  `xml:"disclose"`
+	Xmlns      string            `xml:"xmlns,attr"`
+	Status     []ContactStatus   `xml:"status"`
 }
 
 type ContactPostalInfo struct {
@@ -218,11 +226,84 @@ type ContactPostalInfo struct {
 }
 
 type ContactAddr struct {
-	Street []string `xml:"contact:street"`
 	City   string   `xml:"contact:city"`
 	SP     string   `xml:"contact:sp,omitempty"`
 	PC     string   `xml:"contact:pc"`
 	CC     string   `xml:"contact:cc"`
+	Street []string `xml:"contact:street"`
+}
+
+func normalizeContactPostalInfo(pi *ContactPostalInfo) {
+	if pi.Addr.Street == nil {
+		return
+	}
+
+	const maxLines = 3
+	const maxLineLen = 35
+
+	var words []string
+	for _, line := range pi.Addr.Street {
+		words = append(words, strings.Fields(line)...)
+	}
+
+	var lines []string
+	var cur strings.Builder
+
+	flush := func() {
+		if cur.Len() > 0 {
+			lines = append(lines, cur.String())
+			cur.Reset()
+		}
+	}
+
+	for _, w := range words {
+		if utf8.RuneCountInString(w) > maxLineLen {
+			if cur.Len() > 0 {
+				flush()
+			}
+			rs := []rune(w)
+			w = string(rs[:maxLineLen])
+		}
+
+		if cur.Len() == 0 {
+			cur.WriteString(w)
+			continue
+		}
+
+		tentative := cur.String() + " " + w
+		if utf8.RuneCountInString(tentative) <= maxLineLen {
+			cur.WriteString(" ")
+			cur.WriteString(w)
+			continue
+		}
+
+		flush()
+		cur.WriteString(w)
+		if len(lines) >= maxLines {
+			break
+		}
+	}
+
+	if len(lines) < maxLines {
+		flush()
+	}
+
+	if len(lines) > maxLines {
+		kept := lines[:maxLines]
+		overflow := strings.Join(lines[maxLines-1:], " ")
+		if utf8.RuneCountInString(overflow) > maxLineLen {
+			rs := []rune(overflow)
+			overflow = string(rs[:maxLineLen])
+		}
+		kept[maxLines-1] = overflow
+		lines = kept
+	}
+
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+
+	pi.Addr.Street = lines
 }
 
 func (c *Client) InfoContact(contactID string) (*InfoContactResponse, error) {
@@ -276,12 +357,12 @@ type UpdateContactCommand struct {
 }
 
 type UpdateContact struct {
-	XMLName xml.Name          `xml:"update"`
-	Xmlns   string            `xml:"xmlns,attr"`
-	ID      string            `xml:"id"`
 	Add     *ContactUpdateAdd `xml:"add,omitempty"`
 	Rem     *ContactUpdateRem `xml:"rem,omitempty"`
 	Chg     *ContactUpdateChg `xml:"chg,omitempty"`
+	XMLName xml.Name          `xml:"update"`
+	Xmlns   string            `xml:"xmlns,attr"`
+	ID      string            `xml:"id"`
 }
 
 type ContactUpdateAdd struct {
@@ -294,14 +375,19 @@ type ContactUpdateRem struct {
 
 type ContactUpdateChg struct {
 	PostalInfo *ContactPostalInfo `xml:"postalInfo,omitempty"`
+	Disclose   *ContactDisclose   `xml:"disclose,omitempty"`
 	Voice      string             `xml:"voice,omitempty"`
 	Fax        string             `xml:"fax,omitempty"`
 	Email      string             `xml:"email,omitempty"`
 	AuthInfo   string             `xml:"authInfo>pw,omitempty"`
-	Disclose   *ContactDisclose   `xml:"disclose,omitempty"`
 }
 
-func (c *Client) UpdateContact(contactID string, add *ContactUpdateAdd, rem *ContactUpdateRem, chg *ContactUpdateChg) (*Response, error) {
+func (c *Client) UpdateContact(
+	contactID string,
+	add *ContactUpdateAdd,
+	rem *ContactUpdateRem,
+	chg *ContactUpdateChg,
+) (*Response, error) {
 	updateReq := UpdateContactRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
@@ -318,6 +404,8 @@ func (c *Client) UpdateContact(contactID string, add *ContactUpdateAdd, rem *Con
 		},
 	}
 
+	var response Response
+
 	requestXML, err := xml.Marshal(updateReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal update contact request: %w", err)
@@ -328,13 +416,12 @@ func (c *Client) UpdateContact(contactID string, add *ContactUpdateAdd, rem *Con
 		return nil, fmt.Errorf("failed to send update contact request: %w", err)
 	}
 
-	var response Response
 	if err := xml.Unmarshal(responseXML, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal update contact response: %w", err)
 	}
 
-	if response.Result.Code != "1000" {
-		return nil, fmt.Errorf("update contact failed: %s - %s", response.Result.Code, response.Result.Msg)
+	if !ierr.IsSuccessCode(response.Result.Code) {
+		return nil, ierr.NewEPPError(response.Result.Code, response.Result.Msg, "update contact operation failed")
 	}
 
 	return &response, nil
@@ -371,6 +458,7 @@ func (c *Client) DeleteContact(contactID string) (*Response, error) {
 		},
 	}
 
+	var response Response
 	requestXML, err := xml.Marshal(deleteReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal delete contact request: %w", err)
@@ -381,7 +469,6 @@ func (c *Client) DeleteContact(contactID string) (*Response, error) {
 		return nil, fmt.Errorf("failed to send delete contact request: %w", err)
 	}
 
-	var response Response
 	if err := xml.Unmarshal(responseXML, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal delete contact response: %w", err)
 	}

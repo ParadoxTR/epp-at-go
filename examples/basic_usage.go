@@ -102,7 +102,7 @@ func main() {
 		Type: "privateperson", // Austrian EPP extension: privateperson, organisation, role
 	}
 
-	createContactResp, err := client.CreateContact(contact)
+	createContactResp, err := client.CreateContact(&contact)
 	if err != nil {
 		log.Printf("Contact creation failed: %v", err)
 	} else {
@@ -129,7 +129,6 @@ func main() {
 		fmt.Println("\n=== Domain Create Example ===")
 		domain := epp.Domain{
 			Name:        domainName,
-			Period:      &epp.Period{Unit: "y", Value: 1},
 			Nameservers: []string{"ns1.example.com", "ns2.example.com"},
 			Registrant:  contactID,
 			Contacts: []epp.DomainContact{

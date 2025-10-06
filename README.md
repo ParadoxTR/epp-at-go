@@ -73,7 +73,6 @@ response, err := client.CheckDomain([]string{"example.at", "test.at"})
 // Register a new domain
 domain := epp.Domain{
     Name:        "example.at",
-    Period:      &epp.Period{Unit: "y", Value: 1},
     Nameservers: []string{"ns1.example.com", "ns2.example.com"},
     Registrant:  "contact-123",
     Contacts: []epp.DomainContact{

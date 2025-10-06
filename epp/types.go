@@ -111,7 +111,6 @@ type Domain struct {
 	Nameservers []string        `xml:"ns>hostObj,omitempty"`
 	AuthInfo    string          `xml:"authInfo>pw,omitempty"`
 	Status      []DomainStatus  `xml:"status,omitempty"`
-	Period      *Period         `xml:"period,omitempty"`
 }
 
 type DomainContact struct {
@@ -122,11 +121,6 @@ type DomainContact struct {
 type DomainStatus struct {
 	Status string `xml:"s,attr"`
 	Text   string `xml:",chardata"`
-}
-
-type Period struct {
-	Unit  string `xml:"unit,attr"` // Time unit: y (years), m (months)
-	Value int    `xml:",chardata"`
 }
 
 type CheckDomainRequest struct {
