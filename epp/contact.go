@@ -17,9 +17,9 @@ type CreateContactRequest struct {
 }
 
 type CreateContactCommand struct {
+	Create    CreateContact     `xml:"create"`
 	Extension *CommandExtension `xml:"extension,omitempty"`
 	ClTRID    string            `xml:"clTRID"`
-	Create    CreateContact     `xml:"create"`
 }
 
 type CreateContact struct {
