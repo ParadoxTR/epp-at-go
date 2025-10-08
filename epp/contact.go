@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"unicode/utf8"
 
@@ -28,15 +29,15 @@ type CreateContact struct {
 }
 
 type ContactCreate struct {
-	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
 	XMLName    xml.Name          `xml:"contact:create"`
 	Xmlns      string            `xml:"xmlns:contact,attr"`
 	ID         string            `xml:"contact:id"`
+	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
 	Voice      string            `xml:"contact:voice,omitempty"`
 	Fax        string            `xml:"contact:fax,omitempty"`
 	Email      string            `xml:"contact:email"`
 	AuthInfo   ContactAuthInfo   `xml:"contact:authInfo"`
-	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
+	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
 }
 
 type CommandExtension struct {
@@ -129,10 +130,14 @@ func (c *Client) CreateContact(contact *Contact) (*CreateContactResponse, error)
 		return nil, fmt.Errorf("failed to marshal create contact request: %w", err)
 	}
 
+	log.Printf("EPP CreateContact Request XML:\n%s", string(requestXML))
+
 	responseXML, err := c.sendRequest(requestXML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send create contact request: %w", err)
 	}
+
+	log.Printf("EPP CreateContact Response XML:\n%s", string(responseXML))
 
 	var response CreateContactResponse
 	if err := xml.Unmarshal(responseXML, &response); err != nil {
@@ -226,11 +231,11 @@ type ContactPostalInfo struct {
 }
 
 type ContactAddr struct {
+	Street []string `xml:"contact:street"`
 	City   string   `xml:"contact:city"`
 	SP     string   `xml:"contact:sp,omitempty"`
 	PC     string   `xml:"contact:pc"`
 	CC     string   `xml:"contact:cc"`
-	Street []string `xml:"contact:street"`
 }
 
 func normalizeContactPostalInfo(pi *ContactPostalInfo) {

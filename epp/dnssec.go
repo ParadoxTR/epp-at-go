@@ -56,14 +56,41 @@ func (c *Client) CreateDomainWithDNSSEC(domain Domain, dsRecords []DNSSECData) (
 		}
 	}
 
+	// Convert nameservers to proper structure (NIC.at requires hostAttr format)
+	var nameservers *CreateDomainNameservers
+	if len(domain.Nameservers) > 0 {
+		var hostAttrs []CreateDomainHostAttr
+		for _, ns := range domain.Nameservers {
+			hostAttrs = append(hostAttrs, CreateDomainHostAttr{
+				HostName: ns,
+			})
+		}
+		nameservers = &CreateDomainNameservers{
+			HostAttrs: hostAttrs,
+		}
+	}
+
+	// Convert authInfo to proper structure
+	var authInfo *CreateDomainAuthInfo
+	if domain.AuthInfo != "" {
+		authInfo = &CreateDomainAuthInfo{Pw: domain.AuthInfo}
+	}
+
 	createReq := CreateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
 		Command: CreateDomainCommand{
 			Create: CreateDomain{
 				XMLName: xml.Name{Local: "create"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Domain:  domain,
+				Domain: CreateDomainDetail{
+					XMLName:     xml.Name{Local: "domain:create"},
+					Xmlns:       "urn:ietf:params:xml:ns:domain-1.0",
+					Name:        domain.Name,
+					Nameservers: nameservers,
+					Registrant:  domain.Registrant,
+					Contacts:    domain.Contacts,
+					AuthInfo:    authInfo,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},

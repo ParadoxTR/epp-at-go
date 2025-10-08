@@ -70,9 +70,42 @@ type CreateDomainCommand struct {
 }
 
 type CreateDomain struct {
-	XMLName xml.Name `xml:"create"`
-	Xmlns   string   `xml:"xmlns,attr"`
-	Domain  Domain   `xml:"domain"`
+	XMLName xml.Name           `xml:"create"`
+	Domain  CreateDomainDetail `xml:"domain:create"`
+}
+
+type CreateDomainDetail struct {
+	XMLName     xml.Name                 `xml:"domain:create"`
+	Xmlns       string                   `xml:"xmlns:domain,attr"`
+	Name        string                   `xml:"domain:name"`
+	Period      *CreateDomainPeriod      `xml:"domain:period,omitempty"`
+	Nameservers *CreateDomainNameservers `xml:"domain:ns,omitempty"`
+	Registrant  string                   `xml:"domain:registrant,omitempty"`
+	Contacts    []DomainContact          `xml:"domain:contact,omitempty"`
+	AuthInfo    *CreateDomainAuthInfo    `xml:"domain:authInfo,omitempty"`
+}
+
+type CreateDomainPeriod struct {
+	Unit  string `xml:"unit,attr"`
+	Value int    `xml:",chardata"`
+}
+
+type CreateDomainNameservers struct {
+	HostAttrs []CreateDomainHostAttr `xml:"domain:hostAttr"`
+}
+
+type CreateDomainHostAttr struct {
+	HostName string                 `xml:"domain:hostName"`
+	HostAddr []CreateDomainHostAddr `xml:"domain:hostAddr,omitempty"`
+}
+
+type CreateDomainHostAddr struct {
+	IP   string `xml:"ip,attr"`
+	Addr string `xml:",chardata"`
+}
+
+type CreateDomainAuthInfo struct {
+	Pw string `xml:"domain:pw"`
 }
 
 type CreateDomainResponse struct {
@@ -95,14 +128,41 @@ type CreateDomainData struct {
 }
 
 func (c *Client) CreateDomain(domain Domain) (*CreateDomainResponse, error) {
+	// Convert nameservers to proper structure (NIC.at requires hostAttr format)
+	var nameservers *CreateDomainNameservers
+	if len(domain.Nameservers) > 0 {
+		var hostAttrs []CreateDomainHostAttr
+		for _, ns := range domain.Nameservers {
+			hostAttrs = append(hostAttrs, CreateDomainHostAttr{
+				HostName: ns,
+			})
+		}
+		nameservers = &CreateDomainNameservers{
+			HostAttrs: hostAttrs,
+		}
+	}
+
+	// Convert authInfo to proper structure
+	var authInfo *CreateDomainAuthInfo
+	if domain.AuthInfo != "" {
+		authInfo = &CreateDomainAuthInfo{Pw: domain.AuthInfo}
+	}
+
 	createReq := CreateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
 		Command: CreateDomainCommand{
 			Create: CreateDomain{
 				XMLName: xml.Name{Local: "create"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Domain:  domain,
+				Domain: CreateDomainDetail{
+					XMLName:     xml.Name{Local: "domain:create"},
+					Xmlns:       "urn:ietf:params:xml:ns:domain-1.0",
+					Name:        domain.Name,
+					Nameservers: nameservers,
+					Registrant:  domain.Registrant,
+					Contacts:    domain.Contacts,
+					AuthInfo:    authInfo,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},
