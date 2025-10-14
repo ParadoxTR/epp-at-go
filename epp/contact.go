@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"unicode/utf8"
 
@@ -28,15 +29,15 @@ type CreateContact struct {
 }
 
 type ContactCreate struct {
-	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
 	XMLName    xml.Name          `xml:"contact:create"`
 	Xmlns      string            `xml:"xmlns:contact,attr"`
 	ID         string            `xml:"contact:id"`
+	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
 	Voice      string            `xml:"contact:voice,omitempty"`
 	Fax        string            `xml:"contact:fax,omitempty"`
 	Email      string            `xml:"contact:email"`
 	AuthInfo   ContactAuthInfo   `xml:"contact:authInfo"`
-	PostalInfo ContactPostalInfo `xml:"contact:postalInfo"`
+	Disclose   *ContactDisclose  `xml:"contact:disclose,omitempty"`
 }
 
 type CommandExtension struct {
@@ -129,10 +130,14 @@ func (c *Client) CreateContact(contact *Contact) (*CreateContactResponse, error)
 		return nil, fmt.Errorf("failed to marshal create contact request: %w", err)
 	}
 
+	log.Printf("EPP CreateContact Request XML:\n%s", string(requestXML))
+
 	responseXML, err := c.sendRequest(requestXML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send create contact request: %w", err)
 	}
+
+	log.Printf("EPP CreateContact Response XML:\n%s", string(responseXML))
 
 	var response CreateContactResponse
 	if err := xml.Unmarshal(responseXML, &response); err != nil {
@@ -226,11 +231,11 @@ type ContactPostalInfo struct {
 }
 
 type ContactAddr struct {
+	Street []string `xml:"contact:street"`
 	City   string   `xml:"contact:city"`
 	SP     string   `xml:"contact:sp,omitempty"`
 	PC     string   `xml:"contact:pc"`
 	CC     string   `xml:"contact:cc"`
-	Street []string `xml:"contact:street"`
 }
 
 func normalizeContactPostalInfo(pi *ContactPostalInfo) {
@@ -357,34 +362,29 @@ type UpdateContactCommand struct {
 }
 
 type UpdateContact struct {
-	XMLName       xml.Name      `xml:"update"`
-	ContactUpdate ContactUpdate `xml:"contact:update"`
-}
-
-type ContactUpdate struct {
-	XMLName xml.Name          `xml:"contact:update"`
-	Xmlns   string            `xml:"xmlns:contact,attr"`
-	ID      string            `xml:"contact:id"`
-	Add     *ContactUpdateAdd `xml:"contact:add,omitempty"`
-	Rem     *ContactUpdateRem `xml:"contact:rem,omitempty"`
-	Chg     *ContactUpdateChg `xml:"contact:chg,omitempty"`
+	Add     *ContactUpdateAdd `xml:"add,omitempty"`
+	Rem     *ContactUpdateRem `xml:"rem,omitempty"`
+	Chg     *ContactUpdateChg `xml:"chg,omitempty"`
+	XMLName xml.Name          `xml:"update"`
+	Xmlns   string            `xml:"xmlns,attr"`
+	ID      string            `xml:"id"`
 }
 
 type ContactUpdateAdd struct {
-	Status []ContactStatus `xml:"contact:status,omitempty"`
+	Status []ContactStatus `xml:"status,omitempty"`
 }
 
 type ContactUpdateRem struct {
-	Status []ContactStatus `xml:"contact:status,omitempty"`
+	Status []ContactStatus `xml:"status,omitempty"`
 }
 
 type ContactUpdateChg struct {
-	PostalInfo *ContactPostalInfo `xml:"contact:postalInfo,omitempty"`
-	Disclose   *ContactDisclose   `xml:"contact:disclose,omitempty"`
-	Voice      string             `xml:"contact:voice,omitempty"`
-	Fax        string             `xml:"contact:fax,omitempty"`
-	Email      string             `xml:"contact:email,omitempty"`
-	AuthInfo   *ContactAuthInfo   `xml:"contact:authInfo,omitempty"`
+	PostalInfo *ContactPostalInfo `xml:"postalInfo,omitempty"`
+	Disclose   *ContactDisclose   `xml:"disclose,omitempty"`
+	Voice      string             `xml:"voice,omitempty"`
+	Fax        string             `xml:"fax,omitempty"`
+	Email      string             `xml:"email,omitempty"`
+	AuthInfo   string             `xml:"authInfo>pw,omitempty"`
 }
 
 func (c *Client) UpdateContact(
@@ -399,22 +399,14 @@ func (c *Client) UpdateContact(
 		Command: UpdateContactCommand{
 			Update: UpdateContact{
 				XMLName: xml.Name{Local: "update"},
-				ContactUpdate: ContactUpdate{
-					XMLName: xml.Name{Local: "contact:update"},
-					Xmlns:   "urn:ietf:params:xml:ns:contact-1.0",
-					ID:      contactID,
-					Add:     add,
-					Rem:     rem,
-					Chg:     chg,
-				},
+				Xmlns:   "urn:ietf:params:xml:ns:contact-1.0",
+				ID:      contactID,
+				Add:     add,
+				Rem:     rem,
+				Chg:     chg,
 			},
 			ClTRID: generateTransactionID(),
 		},
-	}
-
-	// Normalize postal info if present in chg
-	if chg != nil && chg.PostalInfo != nil {
-		normalizeContactPostalInfo(chg.PostalInfo)
 	}
 
 	var response Response
