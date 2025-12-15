@@ -96,9 +96,6 @@ func main() {
 		},
 		Voice: "+43.15551234567",
 		Email: "john.doe@example.com",
-		AuthInfo: epp.ContactAuthInfo{
-			Pw: "TestPass123", // Simpler password
-		},
 		Type: "privateperson", // Austrian EPP extension: privateperson, organisation, role
 	}
 

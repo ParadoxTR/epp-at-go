@@ -412,18 +412,31 @@ type TransferDomainCommand struct {
 }
 
 type TransferDomain struct {
-	XMLName  xml.Name `xml:"transfer"`
-	Xmlns    string   `xml:"xmlns,attr"`
-	Op       string   `xml:"op,attr"`
-	Name     string   `xml:"name"`
-	AuthInfo string   `xml:"authInfo>pw,omitempty"`
+	Op     string               `xml:"op,attr"`
+	Domain TransferDomainDetail `xml:"domain:transfer"`
+}
+
+type TransferDomainDetail struct {
+	XMLName  xml.Name           `xml:"domain:transfer"`
+	Xmlns    string             `xml:"xmlns:domain,attr"`
+	Name     string             `xml:"domain:name"`
+	AuthInfo *TransferAuthInfo  `xml:"domain:authInfo,omitempty"`
+}
+
+type TransferAuthInfo struct {
+	Pw string `xml:"domain:pw"`
 }
 
 type TransferDomainResponse struct {
-	XMLName xml.Name                   `xml:"epp"`
-	Result  Result                     `xml:"response>result"`
-	ResData TransferDomainResponseData `xml:"response>resData"`
-	TrID    TrID                       `xml:"response>trID"`
+	XMLName   xml.Name                   `xml:"epp"`
+	Result    Result                     `xml:"response>result"`
+	ResData   TransferDomainResponseData `xml:"response>resData"`
+	Extension *TransferExtension         `xml:"response>extension"`
+	TrID      TrID                       `xml:"response>trID"`
+}
+
+type TransferExtension struct {
+	KeyDate string `xml:"keydate"`
 }
 
 type TransferDomainResponseData struct {
@@ -454,16 +467,23 @@ func (c *Client) TransferCancelDomain(domainName string) (*TransferDomainRespons
 }
 
 func (c *Client) transferDomain(domainName, operation, authInfo string) (*TransferDomainResponse, error) {
+	var authInfoStruct *TransferAuthInfo
+	if authInfo != "" {
+		authInfoStruct = &TransferAuthInfo{Pw: authInfo}
+	}
+
 	transferReq := TransferDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
 		Command: TransferDomainCommand{
 			Transfer: TransferDomain{
-				XMLName:  xml.Name{Local: "transfer"},
-				Xmlns:    "urn:ietf:params:xml:ns:domain-1.0",
-				Op:       operation,
-				Name:     domainName,
-				AuthInfo: authInfo,
+				Op: operation,
+				Domain: TransferDomainDetail{
+					XMLName:  xml.Name{Local: "domain:transfer"},
+					Xmlns:    "urn:ietf:params:xml:ns:domain-1.0",
+					Name:     domainName,
+					AuthInfo: authInfoStruct,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},
