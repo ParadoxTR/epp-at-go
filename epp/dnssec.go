@@ -150,8 +150,11 @@ func (c *Client) UpdateDomainDNSSEC(domainName string, add, rem, chg []DNSSECDat
 		Command: UpdateDomainCommand{
 			Update: UpdateDomain{
 				XMLName: xml.Name{Local: "update"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Name:    domainName,
+				Domain: UpdateDomainDetail{
+					XMLName: xml.Name{Local: "domain:update"},
+					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
+					Name:    domainName,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},

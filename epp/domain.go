@@ -283,29 +283,34 @@ type UpdateDomainCommand struct {
 }
 
 type UpdateDomain struct {
-	XMLName xml.Name         `xml:"update"`
-	Xmlns   string           `xml:"xmlns,attr"`
-	Name    string           `xml:"name"`
-	Add     *DomainUpdateAdd `xml:"add,omitempty"`
-	Rem     *DomainUpdateRem `xml:"rem,omitempty"`
-	Chg     *DomainUpdateChg `xml:"chg,omitempty"`
+	XMLName xml.Name           `xml:"update"`
+	Domain  UpdateDomainDetail `xml:"domain:update"`
+}
+
+type UpdateDomainDetail struct {
+	XMLName xml.Name         `xml:"domain:update"`
+	Xmlns   string           `xml:"xmlns:domain,attr"`
+	Name    string           `xml:"domain:name"`
+	Add     *DomainUpdateAdd `xml:"domain:add,omitempty"`
+	Rem     *DomainUpdateRem `xml:"domain:rem,omitempty"`
+	Chg     *DomainUpdateChg `xml:"domain:chg,omitempty"`
 }
 
 type DomainUpdateAdd struct {
-	Nameservers []string        `xml:"ns>hostObj,omitempty"`
-	Contacts    []DomainContact `xml:"contact,omitempty"`
-	Status      []DomainStatus  `xml:"status,omitempty"`
+	Nameservers []string        `xml:"domain:ns>domain:hostObj,omitempty"`
+	Contacts    []DomainContact `xml:"domain:contact,omitempty"`
+	Status      []DomainStatus  `xml:"domain:status,omitempty"`
 }
 
 type DomainUpdateRem struct {
-	Nameservers []string        `xml:"ns>hostObj,omitempty"`
-	Contacts    []DomainContact `xml:"contact,omitempty"`
-	Status      []DomainStatus  `xml:"status,omitempty"`
+	Nameservers []string        `xml:"domain:ns>domain:hostObj,omitempty"`
+	Contacts    []DomainContact `xml:"domain:contact,omitempty"`
+	Status      []DomainStatus  `xml:"domain:status,omitempty"`
 }
 
 type DomainUpdateChg struct {
-	Registrant string `xml:"registrant,omitempty"`
-	AuthInfo   string `xml:"authInfo>pw,omitempty"`
+	Registrant string `xml:"domain:registrant,omitempty"`
+	AuthInfo   string `xml:"domain:authInfo>domain:pw,omitempty"`
 }
 
 func (c *Client) UpdateDomain(domainName string, add *DomainUpdateAdd, rem *DomainUpdateRem, chg *DomainUpdateChg) (*Response, error) {
@@ -315,11 +320,14 @@ func (c *Client) UpdateDomain(domainName string, add *DomainUpdateAdd, rem *Doma
 		Command: UpdateDomainCommand{
 			Update: UpdateDomain{
 				XMLName: xml.Name{Local: "update"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Name:    domainName,
-				Add:     add,
-				Rem:     rem,
-				Chg:     chg,
+				Domain: UpdateDomainDetail{
+					XMLName: xml.Name{Local: "domain:update"},
+					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
+					Name:    domainName,
+					Add:     add,
+					Rem:     rem,
+					Chg:     chg,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},
