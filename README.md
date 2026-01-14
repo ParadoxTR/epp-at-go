@@ -105,28 +105,13 @@ contact := epp.Contact{
     },
     Voice: "+43.15551234567",
     Email: "max@example.at",
-    AuthInfo: epp.ContactAuthInfo{Pw: "contact-password"},
+
     Type: "privateperson", // Austrian extension
 }
 createResp, err := client.CreateContact(contact)
 ```
 
-### DNSSEC Operations
 
-```go
-// Add DNSSEC during domain creation
-dnssecExt := &epp.DNSSECExtension{
-    KeyData: []epp.DNSSECKeyData{
-        {
-            Flags:     257,
-            Protocol:  3,
-            Algorithm: 8,
-            PubKey:    "your-base64-encoded-key",
-        },
-    },
-}
-// Use in domain create/update operations
-```
 
 ## Error Handling
 

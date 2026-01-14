@@ -202,9 +202,24 @@ type InfoDomainCommand struct {
 }
 
 type InfoDomain struct {
-	XMLName xml.Name `xml:"info"`
-	Xmlns   string   `xml:"xmlns,attr"`
-	Name    string   `xml:"name"`
+	XMLName    xml.Name   `xml:"info"`
+	DomainInfo DomainInfo `xml:"domain:info"`
+}
+
+type DomainInfo struct {
+	XMLName  xml.Name        `xml:"domain:info"`
+	Xmlns    string          `xml:"xmlns:domain,attr"`
+	Name     DomainInfoName  `xml:"domain:name"`
+	AuthInfo *DomainAuthInfo `xml:"domain:authInfo,omitempty"`
+}
+
+type DomainInfoName struct {
+	Hosts string `xml:"hosts,attr"`
+	Value string `xml:",chardata"`
+}
+
+type DomainAuthInfo struct {
+	Pw string `xml:"domain:pw"`
 }
 
 type InfoDomainResponse struct {
@@ -241,8 +256,16 @@ func (c *Client) InfoDomain(domainName string) (*InfoDomainResponse, error) {
 		Command: InfoDomainCommand{
 			Info: InfoDomain{
 				XMLName: xml.Name{Local: "info"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Name:    domainName,
+				DomainInfo: DomainInfo{
+					XMLName: xml.Name{Local: "domain:info"},
+					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
+					Name: DomainInfoName{
+						Hosts: "all",
+						Value: domainName,
+					},
+					// NIC.AT examples include authInfo with an empty pw; it's optional.
+					AuthInfo: &DomainAuthInfo{Pw: ""},
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},
@@ -297,20 +320,38 @@ type UpdateDomainDetail struct {
 }
 
 type DomainUpdateAdd struct {
-	Nameservers []string        `xml:"domain:ns>domain:hostObj,omitempty"`
-	Contacts    []DomainContact `xml:"domain:contact,omitempty"`
-	Status      []DomainStatus  `xml:"domain:status,omitempty"`
+	Ns       *UpdateDomainNameservers `xml:"domain:ns,omitempty"`
+	Contacts []DomainContact          `xml:"domain:contact,omitempty"`
+	Status   []DomainStatus           `xml:"domain:status,omitempty"`
 }
 
 type DomainUpdateRem struct {
-	Nameservers []string        `xml:"domain:ns>domain:hostObj,omitempty"`
-	Contacts    []DomainContact `xml:"domain:contact,omitempty"`
-	Status      []DomainStatus  `xml:"domain:status,omitempty"`
+	Ns       *UpdateDomainNameservers `xml:"domain:ns,omitempty"`
+	Contacts []DomainContact          `xml:"domain:contact,omitempty"`
+	Status   []DomainStatus           `xml:"domain:status,omitempty"`
 }
 
 type DomainUpdateChg struct {
-	Registrant string `xml:"domain:registrant,omitempty"`
-	AuthInfo   string `xml:"domain:authInfo>domain:pw,omitempty"`
+	Registrant string                `xml:"domain:registrant,omitempty"`
+	AuthInfo   *DomainUpdateAuthInfo `xml:"domain:authInfo,omitempty"`
+}
+
+type DomainUpdateAuthInfo struct {
+	Pw string `xml:"domain:pw"`
+}
+
+type UpdateDomainNameservers struct {
+	HostAttrs []UpdateDomainHostAttr `xml:"domain:hostAttr"`
+}
+
+type UpdateDomainHostAttr struct {
+	HostName string                 `xml:"domain:hostName"`
+	HostAddr []UpdateDomainHostAddr `xml:"domain:hostAddr,omitempty"`
+}
+
+type UpdateDomainHostAddr struct {
+	IP   string `xml:"ip,attr"`
+	Addr string `xml:",chardata"`
 }
 
 func (c *Client) UpdateDomain(domainName string, add *DomainUpdateAdd, rem *DomainUpdateRem, chg *DomainUpdateChg) (*Response, error) {
@@ -425,10 +466,10 @@ type TransferDomain struct {
 }
 
 type TransferDomainDetail struct {
-	XMLName  xml.Name           `xml:"domain:transfer"`
-	Xmlns    string             `xml:"xmlns:domain,attr"`
-	Name     string             `xml:"domain:name"`
-	AuthInfo *TransferAuthInfo  `xml:"domain:authInfo,omitempty"`
+	XMLName  xml.Name          `xml:"domain:transfer"`
+	Xmlns    string            `xml:"xmlns:domain,attr"`
+	Name     string            `xml:"domain:name"`
+	AuthInfo *TransferAuthInfo `xml:"domain:authInfo,omitempty"`
 }
 
 type TransferAuthInfo struct {
