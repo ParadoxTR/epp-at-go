@@ -3,6 +3,7 @@ package epp
 import (
 	"encoding/xml"
 	"fmt"
+	"log"
 
 	"github.com/ParadoxTR/epp-at-go/internal/errors"
 	"github.com/ParadoxTR/epp-at-go/internal/validator"
@@ -241,12 +242,18 @@ type InfoDomainData struct {
 	Status      []DomainStatus  `xml:"status"`
 	Registrant  string          `xml:"registrant"`
 	Contacts    []DomainContact `xml:"contact"`
-	Nameservers []string        `xml:"ns>hostObj"`
+	Nameservers []string       `xml:"ns>hostObj"`
+	HostAttrs   []InfoDomainHostAttr `xml:"ns>hostAttr"`
 	ClID        string          `xml:"clID"`
 	CrID        string          `xml:"crID"`
 	CrDate      string          `xml:"crDate"`
 	ExDate      string          `xml:"exDate"`
 	AuthInfo    string          `xml:"authInfo>pw"`
+}
+
+type InfoDomainHostAttr struct {
+	HostName string `xml:"hostName"`
+	HostAddr string `xml:"hostAddr,omitempty"`
 }
 
 func (c *Client) InfoDomain(domainName string) (*InfoDomainResponse, error) {
@@ -394,6 +401,25 @@ func (c *Client) UpdateDomain(domainName string, add *DomainUpdateAdd, rem *Doma
 	}
 
 	return &response, nil
+}
+
+func (c *Client) UpdateDomainNameservers(domainName string, add, remove []UpdateDomainHostAttr) (*Response, error) {
+	var addNS *UpdateDomainNameservers
+	if len(add) > 0 {
+		addNS = &UpdateDomainNameservers{HostAttrs: add}
+	}
+
+	var remNS *UpdateDomainNameservers
+	if len(remove) > 0 {
+		remNS = &UpdateDomainNameservers{HostAttrs: remove}
+	}
+
+	return c.UpdateDomain(
+		domainName,
+		&DomainUpdateAdd{Ns: addNS},
+		&DomainUpdateRem{Ns: remNS},
+		nil,
+	)
 }
 
 type DeleteDomainRequest struct {
