@@ -3,7 +3,6 @@ package epp
 import (
 	"encoding/xml"
 	"fmt"
-	"log"
 
 	"github.com/ParadoxTR/epp-at-go/internal/errors"
 	"github.com/ParadoxTR/epp-at-go/internal/validator"
