@@ -12,6 +12,23 @@ type DNSSECData struct {
 	Digest     string `xml:"secDNS:digest"`
 }
 
+func (data *DNSSECData) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var aux struct {
+		KeyTag     int    `xml:"keyTag"`
+		Alg        int    `xml:"alg"`
+		DigestType int    `xml:"digestType"`
+		Digest     string `xml:"digest"`
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+	data.KeyTag = aux.KeyTag
+	data.Alg = aux.Alg
+	data.DigestType = aux.DigestType
+	data.Digest = aux.Digest
+	return nil
+}
+
 type DNSSECExtension struct {
 	XMLName      xml.Name      `xml:"extension"`
 	SecDNS       *SecDNSData   `xml:"secDNS:create,omitempty"`
@@ -27,8 +44,8 @@ type SecDNSData struct {
 type SecDNSUpdate struct {
 	XMLName xml.Name         `xml:"secDNS:update"`
 	Xmlns   string           `xml:"xmlns:secDNS,attr"`
-	Add     *SecDNSUpdateAdd `xml:"secDNS:add,omitempty"`
 	Rem     *SecDNSUpdateRem `xml:"secDNS:rem,omitempty"`
+	Add     *SecDNSUpdateAdd `xml:"secDNS:add,omitempty"`
 	Chg     *SecDNSUpdateChg `xml:"secDNS:chg,omitempty"`
 }
 
@@ -38,6 +55,7 @@ type SecDNSUpdateAdd struct {
 
 type SecDNSUpdateRem struct {
 	DSData []DNSSECData `xml:"secDNS:dsData"`
+	All    string       `xml:"secDNS:all,omitempty"`
 }
 
 type SecDNSUpdateChg struct {
@@ -71,10 +89,7 @@ func (c *Client) CreateDomainWithDNSSEC(domain Domain, dsRecords []DNSSECData) (
 	}
 
 	// Convert authInfo to proper structure
-	var authInfo *CreateDomainAuthInfo
-	if domain.AuthInfo != "" {
-		authInfo = &CreateDomainAuthInfo{Pw: domain.AuthInfo}
-	}
+	authInfo := &CreateDomainAuthInfo{Pw: domain.AuthInfo}
 
 	createReq := CreateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
@@ -92,14 +107,9 @@ func (c *Client) CreateDomainWithDNSSEC(domain Domain, dsRecords []DNSSECData) (
 					AuthInfo:    authInfo,
 				},
 			},
-			ClTRID: generateTransactionID(),
+			Extension: extension,
+			ClTRID:    generateTransactionID(),
 		},
-	}
-
-	// Add DNSSEC extension if provided
-	if extension != nil {
-		// Note: This would need to be added to the CreateDomainCommand struct
-		// For now, we'll use the regular create and suggest adding extension support
 	}
 
 	requestXML, err := xml.Marshal(createReq)
@@ -144,6 +154,10 @@ func (c *Client) UpdateDomainDNSSEC(domainName string, add, rem, chg []DNSSECDat
 		}
 	}
 
+	if secDNSUpdate == nil {
+		return nil, fmt.Errorf("at least one DNSSEC update operation is required")
+	}
+
 	updateReq := UpdateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
@@ -155,6 +169,9 @@ func (c *Client) UpdateDomainDNSSEC(domainName string, add, rem, chg []DNSSECDat
 					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
 					Name:    domainName,
 				},
+			},
+			Extension: &DNSSECExtension{
+				SecDNSUpdate: secDNSUpdate,
 			},
 			ClTRID: generateTransactionID(),
 		},

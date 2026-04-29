@@ -109,10 +109,11 @@ type CreateDomainAuthInfo struct {
 }
 
 type CreateDomainResponse struct {
-	XMLName xml.Name                 `xml:"epp"`
-	Result  Result                   `xml:"response>result"`
-	ResData CreateDomainResponseData `xml:"response>resData"`
-	TrID    TrID                     `xml:"response>trID"`
+	XMLName   xml.Name                 `xml:"epp"`
+	Result    Result                   `xml:"response>result"`
+	ResData   CreateDomainResponseData `xml:"response>resData"`
+	Extension *DomainInfoExtension     `xml:"response>extension,omitempty"`
+	TrID      TrID                     `xml:"response>trID"`
 }
 
 type CreateDomainResponseData struct {
@@ -143,10 +144,7 @@ func (c *Client) CreateDomain(domain Domain) (*CreateDomainResponse, error) {
 	}
 
 	// Convert authInfo to proper structure
-	var authInfo *CreateDomainAuthInfo
-	if domain.AuthInfo != "" {
-		authInfo = &CreateDomainAuthInfo{Pw: domain.AuthInfo}
-	}
+	authInfo := &CreateDomainAuthInfo{Pw: domain.AuthInfo}
 
 	createReq := CreateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
@@ -223,10 +221,21 @@ type DomainAuthInfo struct {
 }
 
 type InfoDomainResponse struct {
-	XMLName xml.Name               `xml:"epp"`
-	Result  Result                 `xml:"response>result"`
-	ResData InfoDomainResponseData `xml:"response>resData"`
-	TrID    TrID                   `xml:"response>trID"`
+	XMLName   xml.Name               `xml:"epp"`
+	Result    Result                 `xml:"response>result"`
+	ResData   InfoDomainResponseData `xml:"response>resData"`
+	Extension *DomainInfoExtension   `xml:"response>extension,omitempty"`
+	TrID      TrID                   `xml:"response>trID"`
+}
+
+type DomainInfoExtension struct {
+	SecDNS *SecDNSInfoData `xml:"infData,omitempty"`
+}
+
+type SecDNSInfoData struct {
+	XMLName xml.Name     `xml:"infData"`
+	Xmlns   string       `xml:"xmlns,attr"`
+	DSData  []DNSSECData `xml:"dsData"`
 }
 
 type InfoDomainResponseData struct {
@@ -234,25 +243,84 @@ type InfoDomainResponseData struct {
 }
 
 type InfoDomainData struct {
-	XMLName     xml.Name        `xml:"infData"`
-	Xmlns       string          `xml:"xmlns,attr"`
-	Name        string          `xml:"name"`
-	ROID        string          `xml:"roid"`
-	Status      []DomainStatus  `xml:"status"`
-	Registrant  string          `xml:"registrant"`
-	Contacts    []DomainContact `xml:"contact"`
-	Nameservers []string       `xml:"ns>hostObj"`
+	XMLName     xml.Name             `xml:"infData"`
+	Xmlns       string               `xml:"xmlns,attr"`
+	Name        string               `xml:"name"`
+	ROID        string               `xml:"roid"`
+	Status      []DomainStatus       `xml:"status"`
+	Registrant  string               `xml:"registrant"`
+	Contacts    []DomainContact      `xml:"contact"`
+	Nameservers []string             `xml:"ns>hostObj"`
 	HostAttrs   []InfoDomainHostAttr `xml:"ns>hostAttr"`
-	ClID        string          `xml:"clID"`
-	CrID        string          `xml:"crID"`
-	CrDate      string          `xml:"crDate"`
-	ExDate      string          `xml:"exDate"`
-	AuthInfo    string          `xml:"authInfo>pw"`
+	ClID        string               `xml:"clID"`
+	CrID        string               `xml:"crID"`
+	CrDate      string               `xml:"crDate"`
+	UpDate      string               `xml:"upDate"`
+	ExDate      string               `xml:"exDate"`
+	AuthInfo    string               `xml:"authInfo>pw"`
+}
+
+func (data *InfoDomainData) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var aux struct {
+		XMLName     xml.Name             `xml:"infData"`
+		Xmlns       string               `xml:"xmlns,attr"`
+		Name        string               `xml:"name"`
+		ROID        string               `xml:"roid"`
+		Status      []DomainStatus       `xml:"status"`
+		Registrant  string               `xml:"registrant"`
+		Contacts    []DomainContact      `xml:"contact"`
+		Nameservers []string             `xml:"ns>hostObj"`
+		HostAttrs   []InfoDomainHostAttr `xml:"ns>hostAttr"`
+		ClID        string               `xml:"clID"`
+		CrID        string               `xml:"crID"`
+		CrDate      string               `xml:"crDate"`
+		UpDate      string               `xml:"upDate"`
+		ExDate      string               `xml:"exDate"`
+		AuthInfo    string               `xml:"authInfo>pw"`
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+
+	data.XMLName = aux.XMLName
+	data.Xmlns = aux.Xmlns
+	data.Name = aux.Name
+	data.ROID = aux.ROID
+	data.Status = aux.Status
+	data.Registrant = aux.Registrant
+	data.Contacts = aux.Contacts
+	data.Nameservers = aux.Nameservers
+	data.HostAttrs = aux.HostAttrs
+	seenNameservers := make(map[string]struct{}, len(data.Nameservers)+len(aux.HostAttrs))
+	for _, nameserver := range data.Nameservers {
+		seenNameservers[nameserver] = struct{}{}
+	}
+	for _, hostAttr := range aux.HostAttrs {
+		if hostAttr.HostName != "" {
+			if _, ok := seenNameservers[hostAttr.HostName]; ok {
+				continue
+			}
+			data.Nameservers = append(data.Nameservers, hostAttr.HostName)
+			seenNameservers[hostAttr.HostName] = struct{}{}
+		}
+	}
+	data.ClID = aux.ClID
+	data.CrID = aux.CrID
+	data.CrDate = aux.CrDate
+	data.UpDate = aux.UpDate
+	data.ExDate = aux.ExDate
+	data.AuthInfo = aux.AuthInfo
+	return nil
 }
 
 type InfoDomainHostAttr struct {
-	HostName string `xml:"hostName"`
-	HostAddr string `xml:"hostAddr,omitempty"`
+	HostName string           `xml:"hostName"`
+	HostAddr []DomainHostAddr `xml:"hostAddr,omitempty"`
+}
+
+type DomainHostAddr struct {
+	IP   string `xml:"ip,attr"`
+	Addr string `xml:",chardata"`
 }
 
 func (c *Client) InfoDomain(domainName string) (*InfoDomainResponse, error) {
@@ -269,7 +337,6 @@ func (c *Client) InfoDomain(domainName string) (*InfoDomainResponse, error) {
 						Hosts: "all",
 						Value: domainName,
 					},
-					// NIC.AT examples include authInfo with an empty pw; it's optional.
 					AuthInfo: &DomainAuthInfo{Pw: ""},
 				},
 			},
@@ -361,6 +428,10 @@ type UpdateDomainHostAddr struct {
 }
 
 func (c *Client) UpdateDomain(domainName string, add *DomainUpdateAdd, rem *DomainUpdateRem, chg *DomainUpdateChg) (*Response, error) {
+	if add == nil && rem == nil && chg == nil {
+		return nil, fmt.Errorf("at least one domain update operation is required")
+	}
+
 	updateReq := UpdateDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
@@ -413,10 +484,20 @@ func (c *Client) UpdateDomainNameservers(domainName string, add, remove []Update
 		remNS = &UpdateDomainNameservers{HostAttrs: remove}
 	}
 
+	var addUpdate *DomainUpdateAdd
+	if addNS != nil {
+		addUpdate = &DomainUpdateAdd{Ns: addNS}
+	}
+
+	var remUpdate *DomainUpdateRem
+	if remNS != nil {
+		remUpdate = &DomainUpdateRem{Ns: remNS}
+	}
+
 	return c.UpdateDomain(
 		domainName,
-		&DomainUpdateAdd{Ns: addNS},
-		&DomainUpdateRem{Ns: remNS},
+		addUpdate,
+		remUpdate,
 		nil,
 	)
 }
@@ -428,25 +509,60 @@ type DeleteDomainRequest struct {
 }
 
 type DeleteDomainCommand struct {
-	Delete DeleteDomain `xml:"delete"`
-	ClTRID string       `xml:"clTRID"`
+	Delete    DeleteDomain           `xml:"delete"`
+	Extension *DeleteDomainExtension `xml:"extension,omitempty"`
+	ClTRID    string                 `xml:"clTRID"`
 }
 
 type DeleteDomain struct {
-	XMLName xml.Name `xml:"delete"`
-	Xmlns   string   `xml:"xmlns,attr"`
-	Name    string   `xml:"name"`
+	XMLName xml.Name         `xml:"delete"`
+	Domain  DeleteDomainData `xml:"domain:delete"`
 }
 
 func (c *Client) DeleteDomain(domainName string) (*Response, error) {
+	return c.DeleteDomainWithSchedule(domainName, "now")
+}
+
+type DeleteDomainData struct {
+	XMLName xml.Name `xml:"domain:delete"`
+	Xmlns   string   `xml:"xmlns:domain,attr"`
+	Name    string   `xml:"domain:name"`
+}
+
+type DeleteDomainExtension struct {
+	XMLName xml.Name                 `xml:"extension"`
+	Delete  *AtDomainDeleteExtension `xml:"at-ext-domain:delete,omitempty"`
+}
+
+type AtDomainDeleteExtension struct {
+	XMLName      xml.Name `xml:"at-ext-domain:delete"`
+	Xmlns        string   `xml:"xmlns:at-ext-domain,attr"`
+	ScheduleDate string   `xml:"at-ext-domain:scheduledate,omitempty"`
+}
+
+func (c *Client) DeleteDomainWithSchedule(domainName, scheduleDate string) (*Response, error) {
+	if scheduleDate != "" && scheduleDate != "now" && scheduleDate != "expiration" {
+		return nil, fmt.Errorf("invalid domain delete schedule date: %s", scheduleDate)
+	}
+
 	deleteReq := DeleteDomainRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
 		Command: DeleteDomainCommand{
 			Delete: DeleteDomain{
 				XMLName: xml.Name{Local: "delete"},
-				Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-				Name:    domainName,
+				Domain: DeleteDomainData{
+					XMLName: xml.Name{Local: "domain:delete"},
+					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
+					Name:    domainName,
+				},
+			},
+			Extension: &DeleteDomainExtension{
+				Delete: &AtDomainDeleteExtension{
+					XMLName:      xml.Name{Local: "at-ext-domain:delete"},
+					Xmlns:        "http://www.nic.at/xsd/at-ext-domain-1.0",
+					ScheduleDate: scheduleDate,
+				},
 			},
 			ClTRID: generateTransactionID(),
 		},
@@ -511,6 +627,17 @@ type TransferDomainResponse struct {
 
 type TransferExtension struct {
 	KeyDate string `xml:"keydate"`
+}
+
+func (extension *TransferExtension) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var aux struct {
+		KeyDate string `xml:"keydate"`
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+	extension.KeyDate = aux.KeyDate
+	return nil
 }
 
 type TransferDomainResponseData struct {
@@ -586,11 +713,5 @@ func (c *Client) transferDomain(domainName, operation, authInfo string) (*Transf
 }
 
 func (c *Client) WithdrawDomain(domainName string) (*Response, error) {
-
-	chg := &DomainUpdateChg{}
-	add := &DomainUpdateAdd{
-		Status: []DomainStatus{{Status: "clientHold"}},
-	}
-
-	return c.UpdateDomain(domainName, add, nil, chg)
+	return c.withdrawDomain(domainName, nil)
 }

@@ -6,15 +6,20 @@ import (
 )
 
 type WithdrawRequest struct {
-	XMLName xml.Name        `xml:"epp"`
-	Xmlns   string          `xml:"xmlns,attr"`
+	XMLName   xml.Name             `xml:"epp"`
+	Xmlns     string               `xml:"xmlns,attr"`
+	Extension WithdrawEPPExtension `xml:"extension"`
+}
+
+type WithdrawEPPExtension struct {
 	Command WithdrawCommand `xml:"command"`
 }
 
 type WithdrawCommand struct {
-	Withdraw  WithdrawDomainData `xml:"withdraw"`
-	Extension *WithdrawExtension `xml:"extension,omitempty"`
-	ClTRID    string             `xml:"clTRID"`
+	XMLName  xml.Name           `xml:"command"`
+	Xmlns    string             `xml:"xmlns,attr"`
+	Withdraw WithdrawDomainData `xml:"withdraw"`
+	ClTRID   string             `xml:"clTRID"`
 }
 
 type WithdrawDomainData struct {
@@ -23,49 +28,54 @@ type WithdrawDomainData struct {
 }
 
 type WithdrawDomain struct {
-	XMLName xml.Name `xml:"domain:withdraw"`
-	Xmlns   string   `xml:"xmlns:domain,attr"`
-	Name    string   `xml:"domain:name"`
+	XMLName    xml.Name            `xml:"domain:withdraw"`
+	Xmlns      string              `xml:"xmlns:domain,attr"`
+	Name       string              `xml:"domain:name"`
+	ZoneDelete *WithdrawZoneDelete `xml:"domain:zd,omitempty"`
 }
 
-type WithdrawExtension struct {
-	XMLName xml.Name             `xml:"extension"`
-	AtExt   *AtWithdrawExtension `xml:"at-ext-epp:withdraw,omitempty"`
+type WithdrawZoneDelete struct {
+	Value int `xml:"value,attr"`
 }
 
-type AtWithdrawExtension struct {
-	XMLName xml.Name `xml:"at-ext-epp:withdraw"`
-	Xmlns   string   `xml:"xmlns:at-ext-epp,attr"`
-	Domain  string   `xml:"at-ext-epp:domain"`
-}
-
-type WithdrawResponse struct {
-	XMLName xml.Name `xml:"epp"`
-	Result  Result   `xml:"response>result"`
-	TrID    TrID     `xml:"response>trID"`
-}
+type WithdrawResponse = Response
 
 func (c *Client) WithdrawDomainProper(domainName string) (*WithdrawResponse, error) {
+	return c.withdrawDomain(domainName, nil)
+}
+
+func (c *Client) WithdrawDomainWithZoneDelete(domainName string, zoneDelete bool) (*Response, error) {
+	value := 0
+	if zoneDelete {
+		value = 1
+	}
+	return c.withdrawDomain(domainName, &value)
+}
+
+func (c *Client) withdrawDomain(domainName string, zoneDelete *int) (*Response, error) {
+	var zd *WithdrawZoneDelete
+	if zoneDelete != nil {
+		zd = &WithdrawZoneDelete{Value: *zoneDelete}
+	}
+
 	withdrawReq := WithdrawRequest{
 		XMLName: xml.Name{Local: "epp"},
 		Xmlns:   "urn:ietf:params:xml:ns:epp-1.0",
-		Command: WithdrawCommand{
-			Withdraw: WithdrawDomainData{
-				XMLName: xml.Name{Local: "withdraw"},
-				Domain: WithdrawDomain{
-					XMLName: xml.Name{Local: "domain:withdraw"},
-					Xmlns:   "urn:ietf:params:xml:ns:domain-1.0",
-					Name:    domainName,
+		Extension: WithdrawEPPExtension{
+			Command: WithdrawCommand{
+				XMLName: xml.Name{Local: "command"},
+				Xmlns:   "http://www.nic.at/xsd/at-ext-epp-1.0",
+				Withdraw: WithdrawDomainData{
+					XMLName: xml.Name{Local: "withdraw"},
+					Domain: WithdrawDomain{
+						XMLName:    xml.Name{Local: "domain:withdraw"},
+						Xmlns:      "http://www.nic.at/xsd/at-ext-domain-1.0",
+						Name:       domainName,
+						ZoneDelete: zd,
+					},
 				},
+				ClTRID: generateTransactionID(),
 			},
-			Extension: &WithdrawExtension{
-				AtExt: &AtWithdrawExtension{
-					XMLName: xml.Name{Local: "at-ext-epp:withdraw"},
-					Xmlns:   "http://www.nic.at/xsd/at-ext-epp-1.0",
-					Domain:  domainName,
-				},
-			},
-			ClTRID: generateTransactionID(),
 		},
 	}
 
@@ -79,7 +89,7 @@ func (c *Client) WithdrawDomainProper(domainName string) (*WithdrawResponse, err
 		return nil, fmt.Errorf("failed to send withdraw request: %w", err)
 	}
 
-	var response WithdrawResponse
+	var response Response
 	if err := xml.Unmarshal(responseXML, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal withdraw response: %w", err)
 	}

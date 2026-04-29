@@ -68,7 +68,7 @@ func (c *Client) PollMessage() (*PollResponse, error) {
 		return nil, fmt.Errorf("failed to unmarshal poll response: %w", err)
 	}
 
-	if response.Result.Code != "1000" && response.Result.Code != "1300" {
+	if response.Result.Code != "1000" && response.Result.Code != "1300" && response.Result.Code != "1301" {
 		return nil, fmt.Errorf("poll failed: %s - %s", response.Result.Code, response.Result.Msg)
 	}
 
@@ -103,7 +103,7 @@ func (c *Client) AckPollMessage(msgID string) (*PollResponse, error) {
 		return nil, fmt.Errorf("failed to unmarshal poll ack response: %w", err)
 	}
 
-	if response.Result.Code != "1000" && response.Result.Code != "1300" {
+	if response.Result.Code != "1000" && response.Result.Code != "1300" && response.Result.Code != "1301" {
 		return nil, fmt.Errorf("poll ack failed: %s - %s", response.Result.Code, response.Result.Msg)
 	}
 
@@ -146,6 +146,13 @@ func (c *Client) ChangePassword(newPassword string) error {
 					ObjURI: []string{
 						"urn:ietf:params:xml:ns:domain-1.0",
 						"urn:ietf:params:xml:ns:contact-1.0",
+					},
+					SvcExtension: &LoginServiceExtension{
+						ExtURI: []string{
+							"http://www.nic.at/xsd/at-ext-epp-1.0",
+							"http://www.nic.at/xsd/at-ext-domain-1.0",
+							"http://www.nic.at/xsd/at-ext-contact-1.0",
+						},
 					},
 				},
 			},

@@ -18,10 +18,35 @@ type Greeting struct {
 }
 
 type SvcMenu struct {
-	Version []string `xml:"version"`
-	Lang    []string `xml:"lang"`
-	ObjURI  []string `xml:"objURI"`
-	SvcExt  []string `xml:"svcExtURI,omitempty"`
+	Version      []string                  `xml:"version"`
+	Lang         []string                  `xml:"lang"`
+	ObjURI       []string                  `xml:"objURI"`
+	SvcExtension *GreetingServiceExtension `xml:"svcExtension,omitempty"`
+	SvcExt       []string                  `xml:"-"`
+}
+
+type GreetingServiceExtension struct {
+	ExtURI []string `xml:"extURI"`
+}
+
+func (svcMenu *SvcMenu) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var aux struct {
+		Version      []string                  `xml:"version"`
+		Lang         []string                  `xml:"lang"`
+		ObjURI       []string                  `xml:"objURI"`
+		SvcExtension *GreetingServiceExtension `xml:"svcExtension"`
+	}
+	if err := d.DecodeElement(&aux, &start); err != nil {
+		return err
+	}
+	svcMenu.Version = aux.Version
+	svcMenu.Lang = aux.Lang
+	svcMenu.ObjURI = aux.ObjURI
+	svcMenu.SvcExtension = aux.SvcExtension
+	if aux.SvcExtension != nil {
+		svcMenu.SvcExt = aux.SvcExtension.ExtURI
+	}
+	return nil
 }
 
 type DCP struct {

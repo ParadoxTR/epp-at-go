@@ -12,9 +12,10 @@ func generateTransactionID() string {
 }
 
 type Response struct {
-	XMLName xml.Name `xml:"epp"`
-	Result  Result   `xml:"response>result"`
-	TrID    TrID     `xml:"response>trID"`
+	XMLName   xml.Name           `xml:"epp"`
+	Result    Result             `xml:"response>result"`
+	Extension *ResponseExtension `xml:"response>extension,omitempty"`
+	TrID      TrID               `xml:"response>trID"`
 }
 
 type Result struct {
@@ -99,9 +100,9 @@ type ContactStatus struct {
 
 type ContactDisclose struct {
 	Flag  int    `xml:"flag,attr"`
-	Voice string `xml:"voice,omitempty"`
-	Fax   string `xml:"fax,omitempty"`
-	Email string `xml:"email,omitempty"`
+	Voice string `xml:"contact:voice,omitempty"`
+	Fax   string `xml:"contact:fax,omitempty"`
+	Email string `xml:"contact:email,omitempty"`
 }
 
 type Domain struct {

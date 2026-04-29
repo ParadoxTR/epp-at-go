@@ -135,8 +135,8 @@ func (c *Client) Login() error {
 					SvcExtension: &LoginServiceExtension{
 						ExtURI: []string{
 							"http://www.nic.at/xsd/at-ext-epp-1.0",
-							"http://www.nic.at/xsd/at-ext-contact-1.0",
 							"http://www.nic.at/xsd/at-ext-domain-1.0",
+							"http://www.nic.at/xsd/at-ext-contact-1.0",
 						},
 					},
 				},
